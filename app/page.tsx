@@ -8,6 +8,7 @@ interface Player {
   wins: number;
   losses: number;
   totalGames: number;
+  gamesThisWeek: number;
   lp: number;
   tier: string;
   rank: string;
@@ -45,6 +46,7 @@ export default function Home() {
   const [loadingHistory, setLoadingHistory] = useState<Record<string, boolean>>({});
   const [countdownText, setCountdownText] = useState<string>("");
 
+  // Gestion du compte à rebours dynamique du Challenge (Juin 2026)
   useEffect(() => {
     const calculateTimeLeft = () => {
       const now = new Date().getTime();
@@ -68,7 +70,7 @@ export default function Home() {
     };
 
     calculateTimeLeft();
-    const timer = setInterval(calculateTimeLeft, 60000);
+    const timer = setInterval(calculateTimeLeft, 60000); // Mise à jour chaque minute
     return () => clearInterval(timer);
   }, []);
 
@@ -179,11 +181,11 @@ export default function Home() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                     <h2 style={styles.name}>{p.name}</h2>
                     
-                    {/* Les Nouveaux Badges Distinctifs */}
+                    {/* Distinctions globales */}
                     {p.isMaxWinrate && <span style={styles.badgeWinrate} title="Meilleur Winrate du groupe">🎯 MVP WR</span>}
-                    {p.isMaxGames && <span style={styles.badgeSpammer} title="A joué le plus de parties">🚜 BOURREAU</span>}
+                    {p.isMaxGames && <span style={styles.badgeSpammer} title="A joué le plus de parties au total">🚜 BOURREAU</span>}
                     
-                    {/* Streaks d'état */}
+                    {/* Streaks récents */}
                     {p.streak === "FIRE" && <span style={styles.streakFire}>🔥 EN FEU</span>}
                     {p.streak === "TILT" && <span style={styles.streakTransition}>💀 TILT</span>}
                   </div>
@@ -201,7 +203,7 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* JAUGE */}
+              {/* JAUGE DE PROGRESSION (BARRE D'XP) */}
               <div style={styles.progressSection}>
                 <div style={styles.progressLabelRow}>
                   <span style={styles.progressLabel}>Quota Obligatoire :</span>
@@ -222,18 +224,28 @@ export default function Home() {
 
               <div style={styles.divider} />
               
-              {/* STATS */}
+              {/* STATS DÉTAILLÉES */}
               <div style={styles.statsContainer}>
+                {/* Nombre de games de la semaine (Lundi au Dimanche) */}
+                <div style={styles.statLine}>
+                  <span style={styles.statLabel}>📆 Activité (Cette semaine)</span>
+                  <span style={{ ...styles.statValue, color: p.gamesThisWeek > 5 ? '#f1c40f' : '#fff' }}>
+                    {p.gamesThisWeek} {p.gamesThisWeek > 1 ? 'games' : 'game'}
+                  </span>
+                </div>
+
                 <div style={styles.statLine}>
                   <span style={styles.statLabel}>🎯 Points Winrate ({p.winrate}%)</span>
                   <span style={styles.statValue}>+{details.winratePoints}</span>
                 </div>
+
                 <div style={styles.statLine}>
                   <span style={styles.statLabel}>📈 Delta LP purs</span>
                   <span style={{ ...styles.statValue, color: details.lpGainPoints >= 0 ? '#2ecc71' : '#e74c3c' }}>
                     {details.lpGainPoints >= 0 ? `+${details.lpGainPoints}` : details.lpGainPoints}
                   </span>
                 </div>
+
                 <div style={styles.statLine}>
                   <span style={styles.statLabel}>⭐ Bonus / Malus Paliers</span>
                   <span style={{ ...styles.statValue, color: details.bonusPoints >= 0 ? '#f1c40f' : '#e74c3c' }}>

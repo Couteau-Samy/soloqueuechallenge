@@ -102,26 +102,50 @@ export async function GET() {
           const winratePoints = challengeWinrate * 20;
           const finalScore = winratePoints + lpGainPoints + divisionBonusOrMalus + tierBonusOrMalus;
 
+          // --- CALCUL DES GAMES DE LA SEMAINE (LUNDI AU DIMANCHE) & STREAK ---
           let streak = "NONE";
+          let gamesThisWeek = 0;
+          
           try {
-            const matchIds = await fetchRiot(`https://europe.api.riotgames.com/lol/match/v5/matches/by-puuid/${puuid}/ids?queue=420&start=0&count=3`);
-            if (matchIds && matchIds.length >= 3) {
-              const lastMatches = await Promise.all(
-                matchIds.slice(0, 3).map(async (id: string) => {
+            // On récupère jusqu'à 20 matchs pour être sûr d'englober les sessions de la semaine
+            const matchIds = await fetchRiot(`https://europe.api.riotgames.com/lol/match/v5/matches/by-puuid/${puuid}/ids?queue=420&start=0&count=20`);
+            
+            if (matchIds && matchIds.length > 0) {
+              // Calcul du timestamp du lundi en cours à 00h00:00
+              const now = new Date();
+              const day = now.getDay();
+              const diffToMonday = now.getDate() - (day === 0 ? 6 : day - 1); // Gère le dimanche (0) correctement
+              const mondayStart = new Date(now.setDate(diffToMonday));
+              mondayStart.setHours(0, 0, 0, 0);
+              const mondayTimestamp = mondayStart.getTime();
+
+              const matchesDetails = await Promise.all(
+                matchIds.slice(0, 15).map(async (id: string) => {
                   try {
                     const m = await fetchRiot(`https://europe.api.riotgames.com/lol/match/v5/matches/${id}`);
-                    const part = m.info.participants.find((p: any) => p.puuid === puuid);
-                    return part ? part.win : null;
+                    return {
+                      win: m.info.participants.find((part: any) => part.puuid === puuid)?.win ?? null,
+                      gameCreation: m.info.gameCreation
+                    };
                   } catch { return null; }
                 })
               );
-              const cleanWins = lastMatches.filter(w => w !== null);
-              if (cleanWins.length === 3) {
-                if (cleanWins.every(w => w === true)) streak = "FIRE";
-                if (cleanWins.every(w => w === false)) streak = "TILT";
+
+              // 1. Compte uniquement les games jouées depuis lundi 00h00
+              matchesDetails.forEach(m => {
+                if (m && m.gameCreation >= mondayTimestamp) {
+                  gamesThisWeek++;
+                }
+              });
+
+              // 2. Calcul du streak basé sur les 3 matchs les plus récents
+              const top3 = matchesDetails.slice(0, 3).map(m => m?.win);
+              if (top3.length === 3 && top3.every(w => w !== null)) {
+                if (top3.every(w => w === true)) streak = "FIRE";
+                if (top3.every(w => w === false)) streak = "TILT";
               }
             }
-          } catch {}
+          } catch (e) { console.error("Erreur historique hebdomadaire:", e); }
 
           return {
             name: p.name,
@@ -129,6 +153,7 @@ export async function GET() {
             wins: challengeWins,
             losses: challengeLosses,
             totalGames: challengeTotalGames,
+            gamesThisWeek,
             lp: currentLp,
             tier: currentTier,
             rank: currentRank,
@@ -147,12 +172,11 @@ export async function GET() {
             }
           };
         } catch (err) {
-          return { name: p.name, profileIconId: 29, wins: 0, losses: 0, totalGames: 0, lp: 0, tier: "ERROR", rank: "", winrate: 0, startDisplay: "Inconnu", initialRankIndex: 0, streak: "NONE", isMaxWinrate: false, isMaxGames: false, scoreDetails: { winratePoints: 0, lpGainPoints: 0, bonusPoints: 0, finalScore: -9999, isBelowMinGames: true } };
+          return { name: p.name, profileIconId: 29, wins: 0, losses: 0, totalGames: 0, gamesThisWeek: 0, lp: 0, tier: "ERROR", rank: "", winrate: 0, startDisplay: "Inconnu", initialRankIndex: 0, streak: "NONE", isMaxWinrate: false, isMaxGames: false, scoreDetails: { winratePoints: 0, lpGainPoints: 0, bonusPoints: 0, finalScore: -9999, isBelowMinGames: true } };
         }
       })
     );
 
-    // --- CALCULS AUTOMATIQUES DES DISTINCTONS GLOBALES ---
     let maxWinrate = 0;
     let maxGames = 0;
 
