@@ -109,7 +109,7 @@ export async function GET() {
             tier: currentTier,
             rank: currentRank,
             winrate: challengeWinrate,
-            startDisplay: `${p.startTier} ${p.startRank}`,
+            startDisplay: `${p.startTier} ${p.startRank} (${p.startLp} LP)`,
             scoreDetails: {
               winratePoints,
               lpGainPoints,
