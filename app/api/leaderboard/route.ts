@@ -28,7 +28,7 @@ function splitRiotId(riotId: string) {
 async function fetchRiot(url: string) {
   const res = await fetch(url, {
     headers: { "X-Riot-Token": API_KEY || "" },
-    next: { revalidate: 300 }
+    next: { revalidate: 30 } // Cache de 30 secondes pour garder le live sans spammer
   });
   if (!res.ok) throw new Error(`Riot Error ${res.status}`);
   return res.json();
@@ -45,6 +45,14 @@ export async function GET() {
       }))
       .sort((a, b) => b.absStart - a.absStart)
       .map((p) => p.name);
+
+    // Timestamp du lundi de cette semaine à 00:00:00 pour l'activité hebdomadaire
+    const now = new Date();
+    const day = now.getDay();
+    const diffToMonday = now.getDate() - (day === 0 ? 6 : day - 1);
+    const mondayStart = new Date(now.setDate(diffToMonday));
+    mondayStart.setHours(0, 0, 0, 0);
+    const mondaySecondsTimestamp = Math.floor(mondayStart.getTime() / 1000);
 
     const rawResults = await Promise.all(
       players.map(async (p) => {
@@ -67,21 +75,18 @@ export async function GET() {
           const liveWins = soloQ?.wins || 0;
           const liveLosses = soloQ?.losses || 0;
 
+          // 1. CALCUL COMPTEURS DU CHALLENGE (Ultra rapide & Léger)
           const challengeWins = Math.max(0, liveWins - p.startWins);
           const challengeLosses = Math.max(0, liveLosses - p.startLosses);
           const challengeTotalGames = challengeWins + challengeLosses;
-          
-          const challengeWinrate = challengeTotalGames > 0 
-            ? Math.round((challengeWins / challengeTotalGames) * 100) 
-            : 0;
 
           const startAbs = convertToAbsoluteLp(p.startTier, p.startRank, p.startLp);
           const currentAbs = convertToAbsoluteLp(currentTier, currentRank, currentLp);
           const lpGainPoints = currentAbs - startAbs;
 
+          // 2. BONUS / MALUS PALIER
           let divisionBonusOrMalus = 0;
           let tierBonusOrMalus = 0;
-
           const startIndexTier = TIER_ORDER.indexOf(p.startTier.toUpperCase());
           const currentIndexTier = TIER_ORDER.indexOf(currentTier.toUpperCase());
 
@@ -99,53 +104,43 @@ export async function GET() {
             divisionBonusOrMalus = divisionsCrossed * 50;
           }
 
-          const winratePoints = challengeWinrate * 20;
-          const finalScore = winratePoints + lpGainPoints + divisionBonusOrMalus + tierBonusOrMalus;
-
-          // --- CALCUL DES GAMES DE LA SEMAINE (LUNDI AU DIMANCHE) & STREAK ---
-          let streak = "NONE";
+          // 3. ACTIVITÉ DE LA SEMAINE (1 seule requête ultra légère qui récupère juste les IDs)
           let gamesThisWeek = 0;
-          
           try {
-            // On récupère jusqu'à 20 matchs pour être sûr d'englober les sessions de la semaine
-            const matchIds = await fetchRiot(`https://europe.api.riotgames.com/lol/match/v5/matches/by-puuid/${puuid}/ids?queue=420&start=0&count=20`);
-            
-            if (matchIds && matchIds.length > 0) {
-              // Calcul du timestamp du lundi en cours à 00h00:00
-              const now = new Date();
-              const day = now.getDay();
-              const diffToMonday = now.getDate() - (day === 0 ? 6 : day - 1); // Gère le dimanche (0) correctement
-              const mondayStart = new Date(now.setDate(diffToMonday));
-              mondayStart.setHours(0, 0, 0, 0);
-              const mondayTimestamp = mondayStart.getTime();
+            const weeklyMatchIds = await fetchRiot(`https://europe.api.riotgames.com/lol/match/v5/matches/by-puuid/${puuid}/ids?queue=420&startTime=${mondaySecondsTimestamp}&start=0&count=100`);
+            if (weeklyMatchIds) {
+              gamesThisWeek = [...new Set(weeklyMatchIds)].length;
+            }
+          } catch (e) {
+            console.error("Erreur activité:", e);
+          }
 
+          // 4. CALCUL DU STREAK (Seulement 3 requêtes de match par joueur au lieu de 100 !)
+          let streak = "NONE";
+          try {
+            const last3MatchIds = await fetchRiot(`https://europe.api.riotgames.com/lol/match/v5/matches/by-puuid/${puuid}/ids?queue=420&start=0&count=3`);
+            if (last3MatchIds && last3MatchIds.length === 3) {
               const matchesDetails = await Promise.all(
-                matchIds.slice(0, 15).map(async (id: string) => {
+                last3MatchIds.map(async (id: string) => {
                   try {
                     const m = await fetchRiot(`https://europe.api.riotgames.com/lol/match/v5/matches/${id}`);
-                    return {
-                      win: m.info.participants.find((part: any) => part.puuid === puuid)?.win ?? null,
-                      gameCreation: m.info.gameCreation
-                    };
+                    return m.info.participants.find((part: any) => part.puuid === puuid)?.win ?? null;
                   } catch { return null; }
                 })
               );
-
-              // 1. Compte uniquement les games jouées depuis lundi 00h00
-              matchesDetails.forEach(m => {
-                if (m && m.gameCreation >= mondayTimestamp) {
-                  gamesThisWeek++;
-                }
-              });
-
-              // 2. Calcul du streak basé sur les 3 matchs les plus récents
-              const top3 = matchesDetails.slice(0, 3).map(m => m?.win);
-              if (top3.length === 3 && top3.every(w => w !== null)) {
-                if (top3.every(w => w === true)) streak = "FIRE";
-                if (top3.every(w => w === false)) streak = "TILT";
-              }
+              if (matchesDetails.every(w => w === true)) streak = "FIRE";
+              if (matchesDetails.every(w => w === false)) streak = "TILT";
             }
-          } catch (e) { console.error("Erreur historique hebdomadaire:", e); }
+          } catch (e) { 
+            console.error("Erreur streak:", e); 
+          }
+
+          const challengeWinrate = challengeTotalGames > 0 
+            ? Math.round((challengeWins / challengeTotalGames) * 100) 
+            : 0;
+
+          const winratePoints = challengeWinrate * 20;
+          const finalScore = winratePoints + lpGainPoints + divisionBonusOrMalus + tierBonusOrMalus;
 
           return {
             name: p.name,
@@ -163,6 +158,7 @@ export async function GET() {
             streak,
             isMaxWinrate: false,
             isMaxGames: false,
+            isMinWinrate: false,
             scoreDetails: {
               winratePoints,
               lpGainPoints,
@@ -172,24 +168,33 @@ export async function GET() {
             }
           };
         } catch (err) {
-          return { name: p.name, profileIconId: 29, wins: 0, losses: 0, totalGames: 0, gamesThisWeek: 0, lp: 0, tier: "ERROR", rank: "", winrate: 0, startDisplay: "Inconnu", initialRankIndex: 0, streak: "NONE", isMaxWinrate: false, isMaxGames: false, scoreDetails: { winratePoints: 0, lpGainPoints: 0, bonusPoints: 0, finalScore: -9999, isBelowMinGames: true } };
+          console.error(`Erreur joueur ${p.name}:`, err);
+          return { name: p.name, profileIconId: 29, wins: 0, losses: 0, totalGames: 0, gamesThisWeek: 0, lp: 0, tier: "ERROR", rank: "", winrate: 0, startDisplay: "Inconnu", initialRankIndex: 0, streak: "NONE", isMaxWinrate: false, isMaxGames: false, isMinWinrate: false, scoreDetails: { winratePoints: 0, lpGainPoints: 0, bonusPoints: 0, finalScore: -9999, isBelowMinGames: true } };
         }
       })
     );
 
+    // --- CALCULS DES VALEURS EXTRÊMES POUR LES BADGES ---
     let maxWinrate = 0;
     let maxGames = 0;
+    let minWinrate = 101; 
 
     rawResults.forEach(p => {
-      if (p.totalGames > 0 && p.winrate > maxWinrate) maxWinrate = p.winrate;
-      if (p.totalGames > maxGames) maxGames = p.totalGames;
+      if (p.totalGames > 0 && p.tier !== "ERROR") {
+        if (p.winrate > maxWinrate) maxWinrate = p.winrate;
+        if (p.winrate < minWinrate) minWinrate = p.winrate;
+        if (p.totalGames > maxGames) maxGames = p.totalGames;
+      }
     });
+
+    if (minWinrate === 101) minWinrate = -1;
 
     const finalResults = rawResults.map(p => {
       return {
         ...p,
-        isMaxWinrate: p.totalGames > 0 && p.winrate === maxWinrate,
-        isMaxGames: p.totalGames > 0 && p.totalGames === maxGames
+        isMaxWinrate: p.totalGames > 0 && p.winrate === maxWinrate && p.tier !== "ERROR",
+        isMaxGames: p.totalGames > 0 && p.totalGames === maxGames && p.tier !== "ERROR",
+        isMinWinrate: p.totalGames > 0 && p.winrate === minWinrate && p.winrate < 50 && p.tier !== "ERROR"
       };
     });
 
