@@ -38,17 +38,26 @@ export async function GET() {
   if (!API_KEY) return NextResponse.json({ error: "API Key missing" }, { status: 500 });
 
   try {
+    const initialOrder = [...players]
+      .map((p) => ({
+        name: p.name,
+        absStart: convertToAbsoluteLp(p.startTier, p.startRank, p.startLp)
+      }))
+      .sort((a, b) => b.absStart - a.absStart)
+      .map((p) => p.name);
+
     const results = await Promise.all(
       players.map(async (p) => {
         try {
           const { gameName, tagLine } = splitRiotId(p.riotId);
           
           const account = await fetchRiot(`https://europe.api.riotgames.com/riot/account/v1/accounts/by-riot-id/${encodeURIComponent(gameName)}/${encodeURIComponent(tagLine)}`);
-          
-          const summoner = await fetchRiot(`https://euw1.api.riotgames.com/lol/summoner/v4/summoners/by-puuid/${account.puuid}`);
+          const puuid = account.puuid;
+
+          const summoner = await fetchRiot(`https://euw1.api.riotgames.com/lol/summoner/v4/summoners/by-puuid/${puuid}`);
           const profileIconId = summoner.profileIconId || 29;
 
-          const rankedData = await fetchRiot(`https://euw1.api.riotgames.com/lol/league/v4/entries/by-puuid/${account.puuid}`);
+          const rankedData = await fetchRiot(`https://euw1.api.riotgames.com/lol/league/v4/entries/by-puuid/${puuid}`);
           const soloQ = rankedData.find((r: any) => r.queueType === "RANKED_SOLO_5x5") || null;
           
           const currentTier = soloQ?.tier || "UNRANKED";
@@ -71,7 +80,6 @@ export async function GET() {
           
           const lpGainPoints = currentAbs - startAbs;
 
-          // --- LOGIQUE DE BONUS / MALUS DYNAMIQUE ---
           let divisionBonusOrMalus = 0;
           let tierBonusOrMalus = 0;
 
@@ -79,14 +87,12 @@ export async function GET() {
           const currentIndexTier = TIER_ORDER.indexOf(currentTier.toUpperCase());
 
           if (startIndexTier !== -1 && currentIndexTier !== -1) {
-            // Différence de palier (ex: Gold à Silver = -1 palier)
-            const tiersCrossed = currentIndexTier - startIndexTier;
-            tierBonusOrMalus = tiersCrossed * 150;
+            const TiersCrossed = currentIndexTier - startIndexTier;
+            tierBonusOrMalus = TiersCrossed * 150;
 
             const startRankIndex = RANK_ORDER.indexOf(p.startRank.toUpperCase());
             const currentRankIndex = RANK_ORDER.indexOf(currentRank.toUpperCase());
             
-            // Calcul des divisions globales parcourues
             const totalStartDivisions = (startIndexTier * 4) + startRankIndex;
             const totalCurrentDivisions = (currentIndexTier * 4) + currentRankIndex;
             
@@ -95,9 +101,31 @@ export async function GET() {
           }
 
           const winratePoints = challengeWinrate * 20;
-          
-          // Le total cumule les gains ou les pertes (valeurs négatives)
           const finalScore = winratePoints + lpGainPoints + divisionBonusOrMalus + tierBonusOrMalus;
+
+          let streak = "NONE";
+
+          try {
+            const matchIds = await fetchRiot(`https://europe.api.riotgames.com/lol/match/v5/matches/by-puuid/${puuid}/ids?queue=420&start=0&count=3`);
+            
+            if (matchIds && matchIds.length >= 3) {
+              const lastMatches = await Promise.all(
+                matchIds.map(async (id: string) => {
+                  try {
+                    const m = await fetchRiot(`https://europe.api.riotgames.com/lol/match/v5/matches/${id}`);
+                    const part = m.info.participants.find((p: any) => p.puuid === puuid);
+                    return part ? part.win : null;
+                  } catch { return null; }
+                })
+              );
+
+              const cleanWins = lastMatches.filter(w => w !== null);
+              if (cleanWins.length === 3) {
+                if (cleanWins.every(w => w === true)) streak = "FIRE";
+                else if (cleanWins.every(w => w === false)) streak = "TILT";
+              }
+            }
+          } catch (e) { console.error(e); }
 
           return {
             name: p.name,
@@ -110,16 +138,18 @@ export async function GET() {
             rank: currentRank,
             winrate: challengeWinrate,
             startDisplay: `${p.startTier} ${p.startRank} (${p.startLp} LP)`,
+            initialRankIndex: initialOrder.indexOf(p.name),
+            streak,
             scoreDetails: {
               winratePoints,
               lpGainPoints,
-              bonusPoints: divisionBonusOrMalus + tierBonusOrMalus, // Peut être négatif maintenant !
+              bonusPoints: divisionBonusOrMalus + tierBonusOrMalus,
               finalScore: finalScore,
               isBelowMinGames: challengeTotalGames < 30
             }
           };
         } catch (err) {
-          return { name: p.name, profileIconId: 29, wins: 0, losses: 0, totalGames: 0, lp: 0, tier: "ERROR", rank: "", winrate: 0, startDisplay: "Inconnu", scoreDetails: { winratePoints: 0, lpGainPoints: 0, bonusPoints: 0, finalScore: -9999, isBelowMinGames: true } };
+          return { name: p.name, profileIconId: 29, wins: 0, losses: 0, totalGames: 0, lp: 0, tier: "ERROR", rank: "", winrate: 0, startDisplay: "Inconnu", initialRankIndex: 0, streak: "NONE", scoreDetails: { winratePoints: 0, lpGainPoints: 0, bonusPoints: 0, finalScore: -9999, isBelowMinGames: true } };
         }
       })
     );

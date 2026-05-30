@@ -20,7 +20,7 @@ export const players = [
     startLosses: 26,
   },
   {
-    name: "Nulard de Greg",
+    name: "C'est Greg",
     riotId: "karbgreg#EUW",
     // Exemple : S'il a commencé Argent I avec 85 LP
     startTier: "BRONZE",
