@@ -43,14 +43,11 @@ export async function GET() {
         try {
           const { gameName, tagLine } = splitRiotId(p.riotId);
           
-          // 1. On récupère le PUUID
           const account = await fetchRiot(`https://europe.api.riotgames.com/riot/account/v1/accounts/by-riot-id/${encodeURIComponent(gameName)}/${encodeURIComponent(tagLine)}`);
           
-          // 2. On récupère le profil de l'invocateur pour l'icône de profil
           const summoner = await fetchRiot(`https://euw1.api.riotgames.com/lol/summoner/v4/summoners/by-puuid/${account.puuid}`);
           const profileIconId = summoner.profileIconId || 29;
 
-          // 3. On récupère les stats de classement SoloQ
           const rankedData = await fetchRiot(`https://euw1.api.riotgames.com/lol/league/v4/entries/by-puuid/${account.puuid}`);
           const soloQ = rankedData.find((r: any) => r.queueType === "RANKED_SOLO_5x5") || null;
           
@@ -95,6 +92,8 @@ export async function GET() {
           }
 
           const winratePoints = challengeWinrate * 20;
+          
+          // MODIFICATION : Le score est calculé TOUT LE TEMPS maintenant
           const finalScore = winratePoints + lpGainPoints + divisionBonus + tierBonus;
 
           return {
@@ -112,16 +111,17 @@ export async function GET() {
               winratePoints,
               lpGainPoints,
               bonusPoints: divisionBonus + tierBonus,
-              finalScore: challengeTotalGames >= 30 ? finalScore : 0,
-              isInvalid: challengeTotalGames < 30
+              finalScore: finalScore, // Pris en compte directement
+              isBelowMinGames: challengeTotalGames < 30 // Indique simplement s'il est en retard
             }
           };
         } catch (err) {
-          return { name: p.name, profileIconId: 29, wins: 0, losses: 0, totalGames: 0, lp: 0, tier: "ERROR", rank: "", winrate: 0, startDisplay: "Inconnu", scoreDetails: { winratePoints: 0, lpGainPoints: 0, bonusPoints: 0, finalScore: 0, isInvalid: true } };
+          return { name: p.name, profileIconId: 29, wins: 0, losses: 0, totalGames: 0, lp: 0, tier: "ERROR", rank: "", winrate: 0, startDisplay: "Inconnu", scoreDetails: { winratePoints: 0, lpGainPoints: 0, bonusPoints: 0, finalScore: -9999, isBelowMinGames: true } };
         }
       })
     );
 
+    // Le tri se fait maintenant sur le vrai score, peu importe le nombre de games !
     const sortedResults = results.sort((a, b) => b.scoreDetails.finalScore - a.scoreDetails.finalScore);
     return NextResponse.json(sortedResults);
   } catch (e) {

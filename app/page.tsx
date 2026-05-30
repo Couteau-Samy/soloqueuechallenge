@@ -18,7 +18,7 @@ interface Player {
     lpGainPoints: number;
     bonusPoints: number;
     finalScore: number;
-    isInvalid: boolean;
+    isBelowMinGames: boolean;
   };
 }
 
@@ -41,9 +41,9 @@ export default function Home() {
   }, []);
 
   const getRankBadgeStyle = (index: number) => {
-    if (index === 0) return { background: "#f1c40f", color: "#000" }; // Or
-    if (index === 1) return { background: "#b2bec3", color: "#000" }; // Argent
-    if (index === 2) return { background: "#cd7f32", color: "#fff" }; // Bronze
+    if (index === 0) return { background: "#f1c40f", color: "#000" };
+    if (index === 1) return { background: "#b2bec3", color: "#000" };
+    if (index === 2) return { background: "#cd7f32", color: "#fff" };
     return { background: "rgba(255,255,255,0.08)", color: "#fff" };
   };
 
@@ -52,7 +52,7 @@ export default function Home() {
       <main style={styles.page}>
         <div style={styles.loadingContainer}>
           <div style={styles.spinner}></div>
-          <p style={styles.subtitle}>Chargement des stats Riot Games...</p>
+          <p style={styles.subtitle}>Chargement et calcul du classement en temps réel...</p>
         </div>
       </main>
     );
@@ -69,7 +69,7 @@ export default function Home() {
       {/* LEADERBOARD GRID */}
       <div style={styles.grid}>
         {players.map((p, i) => {
-          const isTop1 = i === 0 && p.tier !== "ERROR" && !p.scoreDetails.isInvalid;
+          const isTop1 = i === 0 && p.tier !== "ERROR";
           const isHovered = hoveredPlayer === p.name;
           const details = p.scoreDetails;
 
@@ -80,6 +80,13 @@ export default function Home() {
           };
 
           const iconUrl = `https://ddragon.leagueoflegends.com/cdn/14.10.1/img/profileicon/${p.profileIconId}.png`;
+
+          // Correction de la gestion de la couleur ici en ligne !
+          const scoreValueStyle = {
+            fontSize: "28px", 
+            fontWeight: "900", 
+            color: details.isBelowMinGames ? "#e67e22" : "#f1c40f"
+          };
 
           return (
             <div
@@ -113,10 +120,15 @@ export default function Home() {
 
               {/* BLOC SCORE OFFICIEL */}
               <div style={styles.scoreContainer}>
-                <div style={styles.scoreLabel}>SCORE OFFICIEL</div>
-                <div style={styles.scoreValue(details.isInvalid)}>
-                  {details.isInvalid ? "GAGE 💀" : `${details.finalScore} pts`}
+                <div style={styles.scoreLabel}>SCORE ACTUEL</div>
+                <div style={scoreValueStyle}>
+                  {details.finalScore} pts
                 </div>
+                {details.isBelowMinGames && (
+                  <div style={{ fontSize: '10px', color: '#e67e22', marginTop: '4px', fontWeight: '600' }}>
+                    ⚠️ &lt; 30 games jouées
+                  </div>
+                )}
               </div>
 
               <div style={styles.divider} />
@@ -145,12 +157,12 @@ export default function Home() {
                   </span>
                 </div>
                 
-                {/* TOTAL DE PARTIES ET DETAIL WINS / LOSSES */}
+                {/* TOTAL DE PARTIES */}
                 <div style={styles.statLine}>
                   <span style={styles.statLabel}>🎮 Total de parties</span>
                   <span style={{ 
                     ...styles.statValue, 
-                    color: p.totalGames < 30 ? '#e74c3c' : '#2ecc71' 
+                    color: p.totalGames < 30 ? '#e67e22' : '#2ecc71' 
                   }}>
                     {p.totalGames} / 30 min <span style={{ color: '#aaa', fontWeight: 'normal', marginLeft: '6px' }}>({p.wins}W / {p.losses}L)</span>
                   </span>
@@ -191,7 +203,6 @@ const styles: any = {
     border: "4px solid rgba(255,255,255,0.1)",
     borderTop: "4px solid #f1c40f",
     borderRadius: "50%",
-    animation: "spin 1s linear infinite",
   },
   header: { textAlign: "center", marginBottom: "50px" },
   title: {
@@ -225,7 +236,7 @@ const styles: any = {
     boxShadow: "0 0 30px rgba(241, 196, 15, 0.15)",
     background: "linear-gradient(135deg, rgba(25, 30, 56, 0.6) 0%, rgba(241, 196, 15, 0.04) 100%)",
   },
- cardHover: { 
+  cardHover: { 
     transform: "translateY(-6px)", 
     border: "1px solid rgba(241, 196, 15, 0.5)", 
     boxShadow: "0 10px 20px rgba(0,0,0,0.3)"
@@ -265,11 +276,6 @@ const styles: any = {
     marginTop: "10px"
   },
   scoreLabel: { fontSize: "11px", color: "#8a9fc4", fontWeight: "700", letterSpacing: "1px", marginBottom: "4px" },
-  scoreValue: (isInvalid: boolean) => ({
-    fontSize: "28px", 
-    fontWeight: "900", 
-    color: isInvalid ? "#e74c3c" : "#f1c40f"
-  }),
   divider: { height: "1px", background: "rgba(255,255,255,0.06)", margin: "16px 0" },
   statsContainer: { display: "flex", flexDirection: "column", gap: "12px" },
   statLine: { display: "flex", justifyContent: "space-between", fontSize: "13px" },
