@@ -71,30 +71,33 @@ export async function GET() {
           
           const lpGainPoints = currentAbs - startAbs;
 
-          let divisionBonus = 0;
-          let tierBonus = 0;
+          // --- LOGIQUE DE BONUS / MALUS DYNAMIQUE ---
+          let divisionBonusOrMalus = 0;
+          let tierBonusOrMalus = 0;
 
           const startIndexTier = TIER_ORDER.indexOf(p.startTier.toUpperCase());
           const currentIndexTier = TIER_ORDER.indexOf(currentTier.toUpperCase());
 
-          if (currentAbs > startAbs && startIndexTier !== -1 && currentIndexTier !== -1) {
-            const tiersCrossed = Math.max(0, currentIndexTier - startIndexTier);
-            tierBonus = tiersCrossed * 150;
+          if (startIndexTier !== -1 && currentIndexTier !== -1) {
+            // Différence de palier (ex: Gold à Silver = -1 palier)
+            const tiersCrossed = currentIndexTier - startIndexTier;
+            tierBonusOrMalus = tiersCrossed * 150;
 
             const startRankIndex = RANK_ORDER.indexOf(p.startRank.toUpperCase());
             const currentRankIndex = RANK_ORDER.indexOf(currentRank.toUpperCase());
             
+            // Calcul des divisions globales parcourues
             const totalStartDivisions = (startIndexTier * 4) + startRankIndex;
             const totalCurrentDivisions = (currentIndexTier * 4) + currentRankIndex;
-            const divisionsCrossed = Math.max(0, totalCurrentDivisions - totalStartDivisions);
             
-            divisionBonus = divisionsCrossed * 50;
+            const divisionsCrossed = totalCurrentDivisions - totalStartDivisions;
+            divisionBonusOrMalus = divisionsCrossed * 50;
           }
 
           const winratePoints = challengeWinrate * 20;
           
-          // MODIFICATION : Le score est calculé TOUT LE TEMPS maintenant
-          const finalScore = winratePoints + lpGainPoints + divisionBonus + tierBonus;
+          // Le total cumule les gains ou les pertes (valeurs négatives)
+          const finalScore = winratePoints + lpGainPoints + divisionBonusOrMalus + tierBonusOrMalus;
 
           return {
             name: p.name,
@@ -110,9 +113,9 @@ export async function GET() {
             scoreDetails: {
               winratePoints,
               lpGainPoints,
-              bonusPoints: divisionBonus + tierBonus,
-              finalScore: finalScore, // Pris en compte directement
-              isBelowMinGames: challengeTotalGames < 30 // Indique simplement s'il est en retard
+              bonusPoints: divisionBonusOrMalus + tierBonusOrMalus, // Peut être négatif maintenant !
+              finalScore: finalScore,
+              isBelowMinGames: challengeTotalGames < 30
             }
           };
         } catch (err) {
@@ -121,7 +124,6 @@ export async function GET() {
       })
     );
 
-    // Le tri se fait maintenant sur le vrai score, peu importe le nombre de games !
     const sortedResults = results.sort((a, b) => b.scoreDetails.finalScore - a.scoreDetails.finalScore);
     return NextResponse.json(sortedResults);
   } catch (e) {

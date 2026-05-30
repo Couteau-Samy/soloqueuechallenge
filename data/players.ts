@@ -60,4 +60,14 @@ export const players = [
     startWins: 1,    // <--- Nombre de victoires sur leur profil juste avant le 1er Juin
     startLosses: 5,
   },
+    {
+    name: "Maxianus",
+    riotId: "max#fenom",
+    // Exemple : S'il a commencé Argent I avec 85 LP
+    startTier: "PLATINUM",
+    startRank: "IV",
+    startLp: 30,
+    startWins: 100,    // <--- Nombre de victoires sur leur profil juste avant le 1er Juin
+    startLosses: 100,
+  },
 ];

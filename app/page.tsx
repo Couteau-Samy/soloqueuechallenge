@@ -81,7 +81,7 @@ export default function Home() {
 
           const iconUrl = `https://ddragon.leagueoflegends.com/cdn/14.10.1/img/profileicon/${p.profileIconId}.png`;
 
-          // Correction de la gestion de la couleur ici en ligne !
+          // Gestion propre de la couleur du score (Orange si < 30 games, Or si OK)
           const scoreValueStyle = {
             fontSize: "28px", 
             fontWeight: "900", 
@@ -150,10 +150,14 @@ export default function Home() {
                   </span>
                 </div>
                 
+                {/* BONUS / MALUS DE PALIER DYNAMIQUE */}
                 <div style={styles.statLine}>
-                  <span style={styles.statLabel}>⭐ Bonus (Divisions/Palier)</span>
-                  <span style={{ ...styles.statValue, color: '#f1c40f' }}>
-                    +{details.bonusPoints}
+                  <span style={styles.statLabel}>⭐ Bonus / Malus Paliers</span>
+                  <span style={{ 
+                    ...styles.statValue, 
+                    color: details.bonusPoints >= 0 ? '#f1c40f' : '#e74c3c' 
+                  }}>
+                    {details.bonusPoints >= 0 ? `+${details.bonusPoints}` : details.bonusPoints}
                   </span>
                 </div>
                 
