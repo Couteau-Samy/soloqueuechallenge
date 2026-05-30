@@ -46,7 +46,7 @@ export async function GET() {
       .sort((a, b) => b.absStart - a.absStart)
       .map((p) => p.name);
 
-    const results = await Promise.all(
+    const rawResults = await Promise.all(
       players.map(async (p) => {
         try {
           const { gameName, tagLine } = splitRiotId(p.riotId);
@@ -77,7 +77,6 @@ export async function GET() {
 
           const startAbs = convertToAbsoluteLp(p.startTier, p.startRank, p.startLp);
           const currentAbs = convertToAbsoluteLp(currentTier, currentRank, currentLp);
-          
           const lpGainPoints = currentAbs - startAbs;
 
           let divisionBonusOrMalus = 0;
@@ -104,13 +103,11 @@ export async function GET() {
           const finalScore = winratePoints + lpGainPoints + divisionBonusOrMalus + tierBonusOrMalus;
 
           let streak = "NONE";
-
           try {
             const matchIds = await fetchRiot(`https://europe.api.riotgames.com/lol/match/v5/matches/by-puuid/${puuid}/ids?queue=420&start=0&count=3`);
-            
             if (matchIds && matchIds.length >= 3) {
               const lastMatches = await Promise.all(
-                matchIds.map(async (id: string) => {
+                matchIds.slice(0, 3).map(async (id: string) => {
                   try {
                     const m = await fetchRiot(`https://europe.api.riotgames.com/lol/match/v5/matches/${id}`);
                     const part = m.info.participants.find((p: any) => p.puuid === puuid);
@@ -118,14 +115,13 @@ export async function GET() {
                   } catch { return null; }
                 })
               );
-
               const cleanWins = lastMatches.filter(w => w !== null);
               if (cleanWins.length === 3) {
                 if (cleanWins.every(w => w === true)) streak = "FIRE";
-                else if (cleanWins.every(w => w === false)) streak = "TILT";
+                if (cleanWins.every(w => w === false)) streak = "TILT";
               }
             }
-          } catch (e) { console.error(e); }
+          } catch {}
 
           return {
             name: p.name,
@@ -140,6 +136,8 @@ export async function GET() {
             startDisplay: `${p.startTier} ${p.startRank} (${p.startLp} LP)`,
             initialRankIndex: initialOrder.indexOf(p.name),
             streak,
+            isMaxWinrate: false,
+            isMaxGames: false,
             scoreDetails: {
               winratePoints,
               lpGainPoints,
@@ -149,12 +147,29 @@ export async function GET() {
             }
           };
         } catch (err) {
-          return { name: p.name, profileIconId: 29, wins: 0, losses: 0, totalGames: 0, lp: 0, tier: "ERROR", rank: "", winrate: 0, startDisplay: "Inconnu", initialRankIndex: 0, streak: "NONE", scoreDetails: { winratePoints: 0, lpGainPoints: 0, bonusPoints: 0, finalScore: -9999, isBelowMinGames: true } };
+          return { name: p.name, profileIconId: 29, wins: 0, losses: 0, totalGames: 0, lp: 0, tier: "ERROR", rank: "", winrate: 0, startDisplay: "Inconnu", initialRankIndex: 0, streak: "NONE", isMaxWinrate: false, isMaxGames: false, scoreDetails: { winratePoints: 0, lpGainPoints: 0, bonusPoints: 0, finalScore: -9999, isBelowMinGames: true } };
         }
       })
     );
 
-    const sortedResults = results.sort((a, b) => b.scoreDetails.finalScore - a.scoreDetails.finalScore);
+    // --- CALCULS AUTOMATIQUES DES DISTINCTONS GLOBALES ---
+    let maxWinrate = 0;
+    let maxGames = 0;
+
+    rawResults.forEach(p => {
+      if (p.totalGames > 0 && p.winrate > maxWinrate) maxWinrate = p.winrate;
+      if (p.totalGames > maxGames) maxGames = p.totalGames;
+    });
+
+    const finalResults = rawResults.map(p => {
+      return {
+        ...p,
+        isMaxWinrate: p.totalGames > 0 && p.winrate === maxWinrate,
+        isMaxGames: p.totalGames > 0 && p.totalGames === maxGames
+      };
+    });
+
+    const sortedResults = finalResults.sort((a, b) => b.scoreDetails.finalScore - a.scoreDetails.finalScore);
     return NextResponse.json(sortedResults);
   } catch (e) {
     return NextResponse.json({ error: "Server Error" }, { status: 500 });

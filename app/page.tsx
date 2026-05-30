@@ -15,6 +15,8 @@ interface Player {
   startDisplay: string;
   initialRankIndex: number;
   streak: string;
+  isMaxWinrate: boolean;
+  isMaxGames: boolean;
   scoreDetails: {
     winratePoints: number;
     lpGainPoints: number;
@@ -41,6 +43,34 @@ export default function Home() {
   const [expandedPlayer, setExpandedPlayer] = useState<string | null>(null);
   const [history, setHistory] = useState<Record<string, MatchHistory[]>>({});
   const [loadingHistory, setLoadingHistory] = useState<Record<string, boolean>>({});
+  const [countdownText, setCountdownText] = useState<string>("");
+
+  useEffect(() => {
+    const calculateTimeLeft = () => {
+      const now = new Date().getTime();
+      const startDate = new Date("2026-06-01T00:00:00").getTime();
+      const endDate = new Date("2026-06-21T23:59:59").getTime();
+
+      if (now < startDate) {
+        const difference = startDate - now;
+        const days = Math.floor(difference / (1000 * 60 * 60 * 24));
+        const hours = Math.floor((difference / (1000 * 60 * 60)) % 24);
+        const mins = Math.floor((difference / 1000 / 60) % 60);
+        setCountdownText(`🚀 Lancement du challenge dans : ${days}j ${hours}h ${mins}m`);
+      } else if (now >= startDate && now <= endDate) {
+        const difference = endDate - now;
+        const days = Math.floor(difference / (1000 * 60 * 60 * 24));
+        const hours = Math.floor((difference / (1000 * 60 * 60)) % 24);
+        setCountdownText(`⏳ Temps restant : ${days}j et ${hours}h avant la fin ! 🔥`);
+      } else {
+        setCountdownText("🏆 Le challenge est terminé !");
+      }
+    };
+
+    calculateTimeLeft();
+    const timer = setInterval(calculateTimeLeft, 60000);
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     fetch("/api/leaderboard")
@@ -108,7 +138,8 @@ export default function Home() {
       {/* HEADER */}
       <div style={styles.header}>
         <h1 style={styles.title}>🔥 MENDICK SOLOQ CHALLENGE</h1>
-        <p style={styles.subtitle}>Du 1er Juin au 21 Juin • Cliquez sur une carte pour voir le détail complet 🎮</p>
+        <p style={styles.subtitle}>Du 1er Juin au 21 Juin • Cliquez sur une carte pour voir les détails 🎮</p>
+        <div style={styles.countdownWidget}>{countdownText}</div>
       </div>
 
       {/* LEADERBOARD GRID */}
@@ -118,6 +149,9 @@ export default function Home() {
           const details = p.scoreDetails;
           const isExpanded = expandedPlayer === p.name;
 
+          const gamesPercent = Math.min(100, Math.round((p.totalGames / 30) * 100));
+          const isJaugeComplete = p.totalGames >= 30;
+
           const cardStyle = {
             ...styles.card,
             ...(isTop1 ? styles.top1Card : {}),
@@ -125,21 +159,16 @@ export default function Home() {
           };
 
           const iconUrl = `https://ddragon.leagueoflegends.com/cdn/14.10.1/img/profileicon/${p.profileIconId}.png`;
-          const scoreValueStyle = {
-            fontSize: "28px", 
-            fontWeight: "900", 
-            color: details.isBelowMinGames ? "#e67e22" : "#f1c40f"
-          };
 
           return (
             <div key={p.name} style={cardStyle} onClick={(e) => handlePlayerClick(p.name, e)}>
               
-              {/* Badge de Position + Tendance */}
+              {/* Badge de Position */}
               <div style={{ ...styles.rankBadge, ...getRankBadgeStyle(i) }}>
                 #{i + 1} {renderTrend(i, p.initialRankIndex)}
               </div>
 
-              {/* EN-TÊTE : Image + Nom + Badges de Streaks */}
+              {/* EN-TÊTE AVEC DISTINCTIONS AUTOMATIQUES */}
               <div style={styles.playerHeader}>
                 <img 
                   src={iconUrl} 
@@ -147,10 +176,16 @@ export default function Home() {
                   style={{ ...styles.avatar, borderColor: isTop1 ? '#f1c40f' : 'rgba(255, 255, 255, 0.15)' }} 
                 />
                 <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                     <h2 style={styles.name}>{p.name}</h2>
+                    
+                    {/* Les Nouveaux Badges Distinctifs */}
+                    {p.isMaxWinrate && <span style={styles.badgeWinrate} title="Meilleur Winrate du groupe">🎯 MVP WR</span>}
+                    {p.isMaxGames && <span style={styles.badgeSpammer} title="A joué le plus de parties">🚜 BOURREAU</span>}
+                    
+                    {/* Streaks d'état */}
                     {p.streak === "FIRE" && <span style={styles.streakFire}>🔥 EN FEU</span>}
-                    {p.streak === "TILT" && <span style={styles.streakTilt}>💀 TILT</span>}
+                    {p.streak === "TILT" && <span style={styles.streakTransition}>💀 TILT</span>}
                   </div>
                   <div style={styles.liveRank}>
                     {p.tier} {p.rank} <span style={styles.liveLp}>({p.lp} LP)</span>
@@ -158,53 +193,60 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* BLOC SCORE OFFICIEL */}
+              {/* BLOC SCORE */}
               <div style={styles.scoreContainer}>
                 <div style={styles.scoreLabel}>SCORE ACTUEL</div>
-                <div style={scoreValueStyle}>{details.finalScore} pts</div>
-                {details.isBelowMinGames && (
-                  <div style={{ fontSize: '10px', color: '#e67e22', marginTop: '4px', fontWeight: '600' }}>
-                    ⚠️ &lt; 30 games jouées
-                  </div>
-                )}
+                <div style={{ fontSize: "28px", fontWeight: "900", color: details.isBelowMinGames ? "#e67e22" : "#f1c40f" }}>
+                  {details.finalScore} pts
+                </div>
+              </div>
+
+              {/* JAUGE */}
+              <div style={styles.progressSection}>
+                <div style={styles.progressLabelRow}>
+                  <span style={styles.progressLabel}>Quota Obligatoire :</span>
+                  <span style={{ ...styles.progressValue, color: isJaugeComplete ? '#2ecc71' : '#e67e22' }}>
+                    {p.totalGames} / 30 games ({gamesPercent}%)
+                  </span>
+                </div>
+                <div style={styles.progressBarTrack}>
+                  <div 
+                    style={{ 
+                      ...styles.progressBarFill, 
+                      width: `${gamesPercent}%`,
+                      background: isJaugeComplete ? 'linear-gradient(90deg, #2ecc71, #27ae60)' : 'linear-gradient(90deg, #f39c12, #e67e22)'
+                    }} 
+                  />
+                </div>
               </div>
 
               <div style={styles.divider} />
               
-              {/* STATS DÉTAILLÉES */}
+              {/* STATS */}
               <div style={styles.statsContainer}>
                 <div style={styles.statLine}>
                   <span style={styles.statLabel}>🎯 Points Winrate ({p.winrate}%)</span>
                   <span style={styles.statValue}>+{details.winratePoints}</span>
                 </div>
-                
                 <div style={styles.statLine}>
                   <span style={styles.statLabel}>📈 Delta LP purs</span>
                   <span style={{ ...styles.statValue, color: details.lpGainPoints >= 0 ? '#2ecc71' : '#e74c3c' }}>
                     {details.lpGainPoints >= 0 ? `+${details.lpGainPoints}` : details.lpGainPoints}
                   </span>
                 </div>
-                
                 <div style={styles.statLine}>
                   <span style={styles.statLabel}>⭐ Bonus / Malus Paliers</span>
                   <span style={{ ...styles.statValue, color: details.bonusPoints >= 0 ? '#f1c40f' : '#e74c3c' }}>
                     {details.bonusPoints >= 0 ? `+${details.bonusPoints}` : details.bonusPoints}
                   </span>
                 </div>
-                
-                <div style={styles.statLine}>
-                  <span style={styles.statLabel}>🎮 Total de parties</span>
-                  <span style={{ ...styles.statValue, color: p.totalGames < 30 ? '#e67e22' : '#2ecc71' }}>
-                    {p.totalGames} / 30 min <span style={{ color: '#aaa', fontWeight: 'normal', marginLeft: '6px' }}>({p.wins}W / {p.losses}L)</span>
-                  </span>
-                </div>
               </div>
 
-              {/* ZONE DE L'HISTORIQUE AU CLIC */}
+              {/* HISTORIQUE AU CLIC */}
               {isExpanded && (
                 <div style={styles.historySection} onClick={(e) => e.stopPropagation()}>
                   <div style={styles.divider} />
-                  <h3 style={styles.historyTitle}>Dernières parties SoloQ</h3>
+                  <h3 style={styles.historyTitle}>Détail des 3 dernières parties</h3>
                   
                   {loadingHistory[p.name] && (
                     <div style={styles.historyLoading}>
@@ -257,12 +299,13 @@ export default function Home() {
 
 const styles: any = {
   page: { background: "radial-gradient(circle at top, #16192b 0%, #090a10 100%)", color: "#f5f6fa", minHeight: "100vh", padding: "60px 20px", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" },
-  loadingContainer: { display: "flex", flexDirection: "column", justify_content: "center", alignItems: "center", minHeight: "60vh", gap: "20px" },
+  loadingContainer: { display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", minHeight: "60vh", gap: "20px" },
   spinner: { width: "40px", height: "40px", border: "4px solid rgba(255,255,255,0.1)", borderTop: "4px solid #f1c40f", borderRadius: "50%", animation: "spin 1s linear infinite" },
   miniSpinner: { width: "16px", height: "16px", border: "2px solid rgba(255,255,255,0.1)", borderTop: "2px solid #f1c40f", borderRadius: "50%", animation: "spin 1s linear infinite" },
-  header: { textAlign: "center", marginBottom: "50px" },
+  header: { textAlign: "center", marginBottom: "40px" },
   title: { fontSize: "40px", fontWeight: "900", letterSpacing: "1px", background: "linear-gradient(135deg, #fff 0%, #f1c40f 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", marginBottom: "8px" },
-  subtitle: { color: "#8a9fc4", fontSize: "15px", fontWeight: "500" },
+  subtitle: { color: "#8a9fc4", fontSize: "15px", fontWeight: "500", marginBottom: "16px" },
+  countdownWidget: { display: "inline-block", background: "rgba(241, 196, 15, 0.07)", border: "1px solid rgba(241, 196, 15, 0.2)", color: "#f1c40f", padding: "8px 20px", borderRadius: "30px", fontSize: "13px", fontWeight: "700", letterSpacing: "0.5px" },
   grid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))", gap: "24px", maxWidth: "1200px", margin: "0 auto" },
   card: { position: "relative", background: "rgba(25, 30, 56, 0.4)", backdropFilter: "blur(12px)", padding: "26px", borderRadius: "20px", border: "1px solid rgba(255, 255, 255, 0.05)", cursor: "pointer", transition: "all 0.25s ease" },
   top1Card: { border: "1px solid #f1c40f", boxShadow: "0 0 30px rgba(241, 196, 15, 0.15)", background: "linear-gradient(135deg, rgba(25, 30, 56, 0.6) 0%, rgba(241, 196, 15, 0.04) 100%)" },
@@ -270,21 +313,29 @@ const styles: any = {
   playerHeader: { display: "flex", alignItems: "center", gap: "16px", marginBottom: "15px" },
   avatar: { width: "48px", height: "48px", borderRadius: "50%", border: "2px solid", boxShadow: "0 4px 10px rgba(0,0,0,0.2)" },
   rankBadge: { position: "absolute", top: "18px", right: "18px", fontSize: "12px", fontWeight: "800", padding: "4px 14px", borderRadius: "30px", letterSpacing: "0.5px", display: "flex", alignItems: "center" },
-  name: { fontSize: "24px", fontWeight: "800", color: "#fff" },
-  liveRank: { fontSize: "14px", color: "#3498db", fontWeight: "600" },
+  name: { fontSize: "22px", fontWeight: "800", color: "#fff" },
+  badgeWinrate: { background: "rgba(52, 152, 219, 0.15)", border: "1px solid #3498db", color: "#3498db", fontSize: "9px", fontWeight: "bold", padding: "2px 6px", borderRadius: "4px" },
+  badgeSpammer: { background: "rgba(155, 89, 182, 0.15)", border: "1px solid #9b59b6", color: "#9b59b6", fontSize: "9px", fontWeight: "bold", padding: "2px 6px", borderRadius: "4px" },
+  streakFire: { background: "linear-gradient(135deg, #e67e22, #e74c3c)", color: "#fff", fontSize: "9px", fontWeight: "bold", padding: "2px 6px", borderRadius: "4px" },
+  streakTransition: { background: "linear-gradient(135deg, #7f8c8d, #34495e)", color: "#fff", fontSize: "9px", fontWeight: "bold", padding: "2px 6px", borderRadius: "4px" },
+  liveRank: { fontSize: "14px", color: "#3498db", fontWeight: "600", marginTop: "2px" },
   liveLp: { color: "#aaa", fontWeight: "normal" },
-  scoreContainer: { background: "rgba(0, 0, 0, 0.25)", padding: "14px", borderRadius: "12px", textAlign: "center", marginBottom: "14px", marginTop: "10px" },
+  scoreContainer: { background: "rgba(0, 0, 0, 0.25)", padding: "14px", borderRadius: "12px", textAlign: "center", marginBottom: "16px", marginTop: "10px" },
   scoreLabel: { fontSize: "11px", color: "#8a9fc4", fontWeight: "700", letterSpacing: "1px", marginBottom: "4px" },
+  progressSection: { display: "flex", flexDirection: "column", gap: "6px", marginBottom: "4px" },
+  progressLabelRow: { display: "flex", justifyContent: "space-between", fontSize: "11px", fontWeight: "600" },
+  progressLabel: { color: "#8a9fc4" },
+  progressValue: { fontWeight: "700" },
+  progressBarTrack: { width: "100%", height: "6px", background: "rgba(255,255,255,0.05)", borderRadius: "10px", overflow: "hidden" },
+  progressBarFill: { height: "100%", borderRadius: "10px", transition: "width 0.4s ease" },
   divider: { height: "1px", background: "rgba(255,255,255,0.06)", margin: "16px 0" },
   statsContainer: { display: "flex", flexDirection: "column", gap: "12px" },
   statLine: { display: "flex", justifyContent: "space-between", fontSize: "13px" },
   statLabel: { color: "#8a9fc4" },
   statValue: { fontWeight: "700", color: "#fff" },
   startFooter: { marginTop: "24px", fontSize: "11px", color: "#5d6d7e", textAlign: "right", fontWeight: "500" },
-  streakFire: { background: "linear-gradient(135deg, #e67e22, #e74c3c)", color: "#fff", fontSize: "9px", fontWeight: "bold", padding: "2px 6px", borderRadius: "4px", letterSpacing: "0.5px" },
-  streakTilt: { background: "linear-gradient(135deg, #7f8c8d, #34495e)", color: "#fff", fontSize: "9px", fontWeight: "bold", padding: "2px 6px", borderRadius: "4px", letterSpacing: "0.5px" },
   historySection: { marginTop: "10px" },
-  historyTitle: { fontSize: "13px", fontWeight: "700", color: "#fff", marginBottom: "12px", textTransform: "uppercase", letterSpacing: "0.5px" },
+  historyTitle: { fontSize: "12px", fontWeight: "700", color: "#fff", marginBottom: "10px", textTransform: "uppercase", letterSpacing: "0.5px" },
   historyLoading: { display: "flex", alignItems: "center", justifyContent: "center", gap: "10px", fontSize: "12px", color: "#8a9fc4", padding: "15px 0" },
   matchesList: { display: "flex", flexDirection: "column", gap: "8px" },
   matchRow: { display: "flex", alignItems: "center", padding: "10px 12px", borderRadius: "8px", gap: "12px" },
