@@ -35,9 +35,9 @@ export const players = [
     // Exemple : S'il a commencé Argent I avec 85 LP
     startTier: "DIAMOND",
     startRank: "IV",
-    startLp: 19,
-    startWins: 146,    // <--- Nombre de victoires sur leur profil juste avant le 1er Juin
-    startLosses: 139,
+    startLp: 0,
+    startWins: 150,    // <--- Nombre de victoires sur leur profil juste avant le 1er Juin
+    startLosses: 145,
   },
   {
     name: "Paolo",
@@ -45,9 +45,9 @@ export const players = [
     // Exemple : S'il a commencé Argent I avec 85 LP
     startTier: "SILVER",
     startRank: "IV",
-    startLp: 66,
-    startWins: 24,    // <--- Nombre de victoires sur leur profil juste avant le 1er Juin
-    startLosses: 27,
+    startLp: 70,
+    startWins: 25,    // <--- Nombre de victoires sur leur profil juste avant le 1er Juin
+    startLosses: 28,
   },
 
   {
@@ -64,10 +64,10 @@ export const players = [
     name: "Maxianus",
     riotId: "max#fenom",
     // Exemple : S'il a commencé Argent I avec 85 LP
-    startTier: "PLATINUM",
-    startRank: "IV",
-    startLp: 30,
-    startWins: 100,    // <--- Nombre de victoires sur leur profil juste avant le 1er Juin
-    startLosses: 100,
+    startTier: "GOLD",
+    startRank: "I",
+    startLp: 53,
+    startWins: 103,    // <--- Nombre de victoires sur leur profil juste avant le 1er Juin
+    startLosses: 107,
   },
 ];
