@@ -47,7 +47,7 @@ export const players = [
     startRank: "IV",
     startLp: 70,
     startWins: 25,    // <--- Nombre de victoires sur leur profil juste avant le 1er Juin
-    startLosses: 28,
+    startLosses: 29,
   },
 
   {
