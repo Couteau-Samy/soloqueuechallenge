@@ -7,7 +7,7 @@ export const players = [
     startRank: "III",     // IV, III, II ou I
     startLp: 25,
     startWins: 31,    // <--- Nombre de victoires sur leur profil juste avant le 1er Juin
-    startLosses: 24,
+    startLosses: 25,
   },
   {
     name: "SamyDiCouti",
