@@ -58,7 +58,7 @@ export const players = [
     startRank: "II",
     startLp: 49,
     startWins: 1,    // <--- Nombre de victoires sur leur profil juste avant le 1er Juin
-    startLosses: 5,
+    startLosses: 6,
   },
     {
     name: "Maxianus",
